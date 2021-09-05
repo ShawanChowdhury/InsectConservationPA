@@ -1,0 +1,372 @@
+---
+title: "Tree_plotting"
+author: "Nations"
+date: "2/11/2020"
+output: html_document
+---
+THis is all updated from 20200220_tree_plot
+
+Same as 20200220 but adding tribes in. This may get crazy!
+
+DROP AETHOMYS_namaquensis!!
+
+Revisiting the tree plot. What I need to do for the manuscript tree
+X Change tip states to heat map, not points
+X remove tip labels
+X flip credible intervals at nodes
+X Make node CIs into node dots, SO EASY!!
+add fossil nodes
+add phytools simmap nodes <- BUT I HAVE TO DROP TIPS FIRST! Maybe thats ok?? I'll try. 
+X Check Sundamys states
+
+I think I need two trees, one with simmap nodes for manuscript, one with node labels etc. for supplemental.
+
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = "/Users/Dicrostonyx/Documents/Projects/AncSt/Manuscript/R/tree_plot/")
+#knitr::opts_knit$set(root.dir = "/Users/esselstynlab/Documents/Jon//Users/esselstynlab/Documents/Jon/Murine_Ch_St/20190522_simmap/")
+```
+
+```{r}
+library(tidyverse)
+library(phytools)
+library(ggtree)
+library(geiger)
+library(ggimage)
+```
+
+
+Tree and data load in
+Data is already sorted and pruned to match tree
+State #5 = NA
+```{r}
+tre <- read.beast(file = "435_MCC.tre")
+tre2 <- read.newick(file = "435_MCC.nwk")
+dat <- read.csv("state_435.csv", header=TRUE, row.names=1,stringsAsFactors=FALSE)
+#pd <- readRDS(file = "simmap_50_summary.Rds")
+#ace <- as.data.frame(pd$ace)
+```
+#keep only 1 state_name and rownames from dat
+```{r}
+dat2 <- dat[,2,FALSE]
+```
+
+```{r}
+#dat$state_name <- factor(dat$state_name, levels = rev(levels(dat$state_name)))
+```
+
+Colors
+```{r}
+require(RColorBrewer)
+cols <- c("#66a61e","#7570b3","#e6ab02", "#85D4E3", "#e5deda")
+names(cols) = c("Arboreal", "General", "Terrestrial", "Amphibious", "Unknown")
+```
+
+#Trying to reverse nodes
+SOMEHOW THERE IS AN "NA" in the a@data$height_0.95_HPD and I have NO IDEA WHY!
+so I actually had to add another NA for some reason, then read it back in!
+so now the data is xx.csv
+
+original code form here :
+https://groups.google.com/forum/#!msg/bioc-ggtree/wuAlY9phL9Q/L7efezPgDAAJ
+
+Only Do this once! Once the xx.csv exists I don't need it anymore.
+```{r}
+#THIS SOMEHOW INTRODUCES A NA INTO THE matrix. I added another NA just below it and everything is gravy!
+#xx <- matrix(unlist(tre@data$height_0.95_HPD))
+#write.csv(xx, file ="xx.csv")
+```
+
+Manually add the NA, then read back in and manipulate
+```{r}
+xx <- read_csv(file ="xx.csv")
+xx <- data.frame(V1=xx$V2[c(TRUE, FALSE)], V2=xx$V2[c(FALSE, TRUE)])
+minmax = xx
+```
+
+This creates a dataframe with all nodes, including tips
+```{r}
+bar_df = data.frame(node_id=as.integer(tre@data$node),as.data.frame(minmax))
+#changes column names
+names(bar_df) = c('node_id','min','max')
+#This removes tips
+bar_df = bar_df %>% filter(node_id > Ntip(tre@phylo))
+```
+
+```{r}
+b = ggtree(tre)
+bar_df = bar_df %>% left_join(b$data, by=c('node_id'='node')) %>% select(node_id,min,max,y)
+```
+Now bar_DF is my baby!
+
+#### Circular Version MODIFIED
+Main tree with clase labels
+```{r}
+tre3 <- ggtree(tre) + theme_tree2() 
+tre2 <- revts(tre3)
+tre3 <- ggtree(tre, layout = "fan", open.angle=7) #+ theme_tree2() 
+tre2 <- revts(tre3) 
+
+tre1 <- tre2 + scale_x_continuous(breaks=c(-21:0), labels=c("", 20,"","","","",15,"","","","",10,"","","","",5,"","","","",""), limits = c(-21, 9)) + 
+  # trying to make node points instead of nodelabs
+        #geom_nodelab(aes(x=branch, label=round(posterior, 2), subset = !is.na(as.numeric(posterior)) & as.numeric(posterior) < 0.94), vjust=-.6, hjust = .8, size = 1)   + 
+          geom_nodepoint(aes( label=posterior, subset = !is.na(as.numeric(posterior)) & as.numeric(posterior) > 0.9), size = 1.7, color ="grey30", alpha = 0.8)   +
+  #this was for the old way of adding 
+        #geom_range(range='height_0.95_HPD', color='#C93312', alpha=.3, size=1, branch.length="height") +
+  #This adds the new bars in!!
+  geom_segment(aes(x=-min, y=y+0, xend=-max, yend=y+0), data=bar_df, color='royalblue2', alpha = 0.7) +
+  #These are tribe labels
+  geom_cladelabel(node=625,  label = "Apodemini", align = T, offset = 4.5,  offset.text = 0.5, barsize = 2.2, color = c("grey80", "black"), fontface = "bold", fontsize = 5) +
+geom_cladelabel(node=558,   label = "Arvicanthini", align = T, offset = 4.5,  offset.text = 2.3, barsize = 2.2,  color = c("grey80", "black"), fontface = "bold", fontsize = 5) +
+geom_cladelabel(node=440,   label = "Hydromyini", align = T, offset = 4.5,  offset.text = 0.5, barsize = 2.2,  color = c("grey80", "black"), fontface = "bold", fontsize = 5) +
+geom_cladelabel(node=650,   label = "Malacomyini", align = T, offset = 4.5,  offset.text = 0.5, barsize = 2.2,  color = c("grey40", "black"), fontface = "bold", fontsize = 5) +
+geom_cladelabel(node=620,   label = "Millardini", align = T, offset = 4.5,  offset.text = 3.7, barsize = 2.2,  color = c("grey80", "black"), fontface = "bold", fontsize = 5) +
+geom_cladelabel(node=652,   label = "Murini", align = T, offset = 4.5,  offset.text = 0.5, barsize = 2.2,  color = c("grey80", "black"), fontface = "bold", fontsize = 5) +  
+geom_cladelabel(node=606,   label = "Otomyini", align = T, offset = 4.5,  offset.text = 2.9, barsize = 2.2,  color = c("grey40", "black"), fontface = "bold", fontsize = 5) +
+geom_cladelabel(node=856,   label = "Phloeomyini", align = T, offset = 4.5,  offset.text = 0.5, barsize = 2.2,  color = c("grey40", "black"), fontface = "bold", fontsize = 5) +
+geom_cladelabel(node=683,   label = "Praomyini", align = T, offset = 4.5,  offset.text = 0.7, barsize = 2.2,  color = c("grey40", "black"), fontface = "bold", fontsize = 5) +
+geom_cladelabel(node=729,   label = "Rattini", align = T, offset = 4.5,  offset.text = 3, barsize = 2.2,  color = c("grey40", "black"), fontface = "bold", fontsize = 5) +
+
+#Divisions
+# Divisions with the same names as tribes? Well just add them in to start
+geom_cladelabel(node=856,   label = "Phloeomys", align = T, offset = 2.5,  offset.text = 0.5, barsize = 4.8, color = c("grey80", "black"), fontsize = 2.9) +
+geom_cladelabel(node=551,   label = "Chiropodomys", align = T, offset = 2.5,  offset.text = 0.5, barsize = 4.8,  color = c("grey40", "black"), fontsize = 2.9) +
+geom_cladelabel(node=519,   label = "Chrotomys", align = T, offset = 2.5,  offset.text = 0.5, barsize = 4.8,  color = c("grey80", "black"), fontsize = 2.9) +
+geom_cladelabel(node=512,   label = "Pogonomys", align = T, offset = 2.5,  offset.text = 0.5, barsize = 4.8,  color = c("grey40", "black"), fontsize = 2.9) +
+geom_cladelabel(node=445,   label = "Mallomys", align = T, offset = 2.5,  offset.text = 0.5, barsize = 4.8,  color = c("grey80", "black"), fontsize = 2.9) +
+geom_cladelabel(node=454,   label = "Hydromys", align = T, offset = 2.5,  offset.text = 0.5, barsize = 4.8,  color = c("grey40", "black"), fontsize = 2.9) +  
+geom_cladelabel(node=465,   label = "Conilurus", align = T, offset = 2.5,  offset.text = 0.5, barsize = 4.8,  color = c("grey80", "black"), fontsize = 2.9) +
+geom_cladelabel(node=468,   label = "Uromys", align = T, offset = 2.5,  offset.text = 0.5, barsize = 4.8,  color = c("grey40", "black"), fontsize = 2.9) +
+geom_cladelabel(node=480,   label = "Pseudomys", align = T, offset = 2.5,  offset.text = 0.5, barsize = 4.8,  color = c("grey80", "black"), fontsize = 2.9) +
+geom_cladelabel(node=841,   label = "Maxomys", align = T, offset = 2.5,  offset.text = 0.5, barsize = 4.8,  color = c("grey40", "black"), fontsize = 2.9) +
+geom_cladelabel(node=832,   label = "Echiothrix", align = T, offset = 2.5,  offset.text = 0.5, barsize = 4.8, color = c("grey80", "black"), fontsize = 2.9) +
+geom_cladelabel(node=801,   label = "Dacnomys", align = T, offset = 2.5,  offset.text = 0.5, barsize = 4.8,  color = c("grey40", "black"), fontsize = 2.9) +
+geom_cladelabel(node=799,   label = "Berylmys", align = T, offset = 2.5,  offset.text = 0.5, barsize = 4.8,  color = c("grey80", "black"), fontsize = 2.9) +
+geom_cladelabel(node=776,   label = "Bunomys", align = T, offset = 2.5,  offset.text = 0.5, barsize = 4.8,  color = c("grey40", "black"), fontsize = 2.9) +
+geom_cladelabel(node=736,   label = "Rattus", align = T, offset = 2.5,  offset.text = 0.5, barsize = 4.8,  color = c("grey80", "black"), fontsize = 2.9) +
+geom_cladelabel(node=620,   label = "Millardia", align = T, offset = 2.5,  offset.text = 0.5, barsize = 4.8,  color = c("grey40", "black"), fontsize = 2.9) +  
+geom_cladelabel(node=606,   label = "Otomys", align = T, offset = 2.5,  offset.text = 0.5, barsize = 4.8,  color = c("grey80", "black"), fontsize = 2.9) +
+geom_cladelabel(node=605,   label = "Golunda", align = T, offset = 2.5,  offset.text = 0.5, barsize = 4.8,  color = c("grey40", "black"), fontsize = 2.9) +
+geom_cladelabel(node=597,   label = "Hybomys", align = T, offset = 2.5,  offset.text = 0.5, barsize = 4.8,  color = c("grey80", "black"), fontsize = 2.9) +
+geom_cladelabel(node=563,   label = "Aethomys", align = T, offset = 2.5,  offset.text = 0.5, barsize = 4.8,  color = c("grey40", "black"), fontsize = 2.9) +
+geom_cladelabel(node=568,   label = "Grammomys", align = T, offset = 2.5,  offset.text = 0.5, barsize = 4.8, color = c("grey80", "black"), fontsize = 2.9) +
+geom_cladelabel(node=596,   label = "Dasymys", align = T, offset = 2.5,  offset.text = 0.5, barsize = 4.8,  color = c("grey40", "black"), fontsize = 2.9) +
+geom_cladelabel(node=578,   label = "Arvicanthis", align = T, offset = 2.5,  offset.text = 0.5, barsize = 4.8,  color = c("grey80", "black"), fontsize = 2.9) +
+geom_cladelabel(node=683,   label = "Stenocephlemys", align = T, offset = 2.5,  offset.text = 0.5, barsize = 4.8,  color = c("grey40", "black"), fontsize = 2.9) +
+geom_cladelabel(node=625,   label = "Apodemus", align = T, offset = 2.5,  offset.text = 0.5, barsize = 4.8,  color = c("grey80", "black"), fontsize = 2.9) +
+geom_cladelabel(node=650,   label = "Malacomys", align = T, offset = 2.5,  offset.text = 0.5, barsize = 4.8,  color = c("grey40", "black"), fontsize = 2.9) +  
+geom_cladelabel(node=652,   label = "Mus", align = T, offset = 2.5,  offset.text = 0.5, barsize = 4.8,  color = c("grey80", "black"), fontsize = 2.9) 
+```
+heatmap for tips
+```{r}
+  pp1 <- gheatmap(tre1, dat[, 3, F], offset=0.01,
+                  width=.07,
+                  #colnames=F,
+                  colnames_offset_y = 1000,
+                  colnames_offset_x = 1000) 
+
+  pp1 <- pp1 + scale_fill_manual(values = cols) + 
+    theme(legend.position = c(0.1, 0.7)) +
+    theme(legend.title = element_blank()) +
+    #guides(colour = guide_legend(title.position = "right")) +
+  guides(colour = guide_legend(override.aes = list(size=8))) +
+  labs(color="Locomotor State") 
+
+```
+Adding in the time scale
+```{r}
+pp2 <- pp1 + geom_treescale(x=-17, y = 441, width=1, color='grey80', offset = -5, linesize = 2, fontsize = 0) +
+geom_treescale(x=-16, y = 441, width=1, color='black', offset = -5, linesize = 2, fontsize = 0) +
+geom_treescale(x=-15, y = 441, width=1, color='grey80', offset = -5, linesize = 2, fontsize = 0) +
+geom_treescale(x=-14, y = 441, width=1, color='black', offset = -5, linesize = 2, fontsize = 0) +
+geom_treescale(x=-13, y = 441, width=1, color='grey80', offset = -5, linesize = 2, fontsize = 0) +
+geom_treescale(x=-12, y = 441, width=1, color='black', offset = -5, linesize = 2, fontsize = 0) +
+geom_treescale(x=-11, y = 441, width=1, color='grey80', offset = -5, linesize = 2, fontsize = 0) +
+geom_treescale(x=-10, y = 441, width=1, color='black', offset = -5, linesize = 2, fontsize = 0) +
+geom_treescale(x=-9, y = 441, width=1, color='grey80', offset = -5, linesize = 2, fontsize = 0) +
+geom_treescale(x=-8, y = 441, width=1, color='black', offset = -5, linesize = 2, fontsize = 0) +
+geom_treescale(x=-7, y = 441, width=1, color='grey80', offset = -5, linesize = 2, fontsize = 0) +
+geom_treescale(x=-6, y = 441, width=1, color='black', offset = -5, linesize = 2, fontsize = 0) +
+geom_treescale(x=-5, y = 441, width=1, color='grey80', offset = -5, linesize = 2, fontsize = 0) +
+geom_treescale(x=-4, y = 441, width=1, color='black', offset = -5, linesize = 2, fontsize = 0) +
+geom_treescale(x=-3, y = 441, width=1, color='grey80', offset = -5, linesize = 2, fontsize = 0) +
+geom_treescale(x=-2, y = 441, width=1, color='black', offset = -5, linesize = 2, fontsize = 0) +
+geom_treescale(x=-1, y = 441, width=1, color='grey80', offset = -5, linesize = 2, fontsize = 0)
+
+```
+
+fossils
+```{r}
+pp3 <- pp2 +
+  geom_point2(aes(subset=(node==437)), shape = 23, size=5, fill='black') +
+  geom_point2(aes(subset=(node==553)), shape = 23, size=5, fill='black') +
+  geom_point2(aes(subset=(node==557)), shape = 23, size=5, fill='black') +
+  geom_point2(aes(subset=(node==563)), shape = 23, size=5, fill='black') +
+  geom_point2(aes(subset=(node==580)), shape = 23, size=5, fill='black') +
+  geom_point2(aes(subset=(node==625)), shape = 23, size=5, fill='black') +
+  geom_point2(aes(subset=(node==652)), shape = 23, size=5, fill='black')
+
+#pp3
+
+output_file = "20200413_test.pdf"
+
+ggsave(output_file, width = 15, height = 15)
+
+```
+
+
+
+
+## Divisions 
+THis is how I got the nodes for the 
+These are the same 
+ X Apodemyini = Apodemus
+ X Hapalomyini =  Hapalomys = ROOT
+ X Malacomyini = Malacomys
+ X Milardini = Millardia
+ X Murini = Mus
+ X Otomyini = Otomys
+ X Phloeomyini = Phloeomys
+ 
+ Colomys is nested in Stenocephalemys 
+ 
+
+```{r}
+anctre <- read.newick(file = "435_MCC.nwk")
+```
+ 
+ 
+ Phloeomys is 832
+```{r Phloeomys 856}
+getMRCA(anctre, tip = c("Phloeomys_cumingi", "Crateromys_heaneyi"))
+```
+
+```{r Chiropodomys 551}
+getMRCA(anctre, tip = c("Chiropodomys_gliroides", "Chiropodomys_major"))
+```
+
+
+```{r Chrotomys 519}
+getMRCA(anctre, tip = c("Archboldomys_maximus", "Apomys_datae"))
+```
+
+
+```{r Pogonomys 512}
+getMRCA(anctre, tip = c("Pogonomys_sylvestris", "Hyomys_goliath"))
+```
+
+
+```{r Mallomys 445}
+getMRCA(anctre, tip = c("Coccymys_ruemmleri", "Mallomys_aroensis"))
+```
+
+
+```{r Hydromys 454}
+getMRCA(anctre, tip = c("Crossomys_moncktoni", "Xeromys_myoides"))
+```
+
+
+```{r Conilurus 465}
+getMRCA(anctre, tip = c("Leporillus_conditor", "Mesembriomys_macrourus"))
+```
+
+
+```{r Uromys 468}
+getMRCA(anctre, tip = c("Uromys_caudimaculatus", "Melomys_leucogaster"))
+```
+
+
+```{r Pseudomys 480}
+getMRCA(anctre, tip = c("Pseudomys_bolami", "Leggadina_forresti"))
+```
+
+
+```{r Maxomys 841}
+getMRCA(anctre, tip = c("Maxomys_moi", "Maxomys_whiteheadi"))
+```
+
+
+```{r Echiothrix 832}
+getMRCA(anctre, tip = c("Sommeromys_macrorhinos", "Tateomys_macrocercus"))
+```
+
+
+```{r Dacnomys 801}
+getMRCA(anctre, tip = c("Saxatilomys_paulinae", "Niviventer_eha"))
+```
+
+
+```{r Berylmys 799}
+getMRCA(anctre, tip = c("Berylmys_manipulus", "Berylmys_bowersi"))
+```
+
+
+```{r Bunomys 776}
+getMRCA(anctre, tip = c("Bunomys_torajae", "Rattus_timorensis"))
+```
+
+
+```{r Rattus 736}
+getMRCA(anctre, tip = c("Diplothrix_legata", "Rattus_steini"))
+```
+
+
+```{r Millardia 620}
+getMRCA(anctre, tip = c("Millardia_meltada", "Cremnomys_cutchicus"))
+```
+ 
+```{r Otomys 606}
+getMRCA(anctre, tip = c("Otomys_tropicalis", "Otomys_irroratus"))
+``` 
+
+
+```{r Golunda 605}
+getMRCA(anctre, tip = c("Oenomys_hypoxanthus", "Golunda_ellioti"))
+```
+
+
+```{r Hybomys 597}
+getMRCA(anctre, tip = c("Hybomys_planifrons", "Hybomys_badius"))
+```
+
+```{r Aethomys 563}
+getMRCA(anctre, tip = c("Aethomys_hindei", "Aethomys_nyikae"))
+```
+
+
+```{r Grammomys 568}
+getMRCA(anctre, tip = c("Grammomys_dolichurus", "Thallomys_loringi"))
+```
+
+
+```{r Dasymys 596}
+getMRCA(anctre, tip = c("Dasymys_incomtus", "Dasymys_rufulus"))
+```
+
+
+```{r Arvicanthis 578}
+getMRCA(anctre, tip = c("Lemniscomys_bellieri", "Desmomys_harringtoni"))
+```
+
+
+```{r Stenocephalemys 683}
+getMRCA(anctre, tip = c("Mastomys_natalensis", "Mastomys_pernanus"))
+```
+
+
+```{r Apodemus 625}
+getMRCA(anctre, tip = c("Apodemus_hermonensis", "Tokudaia_osimensis"))
+```
+ 
+
+```{r Malacomys 650}
+getMRCA(anctre, tip = c("Malacomys_longipes", "Malacomys_edwardsi"))
+```
+
+
+```{r Mus 652}
+getMRCA(anctre, tip = c("Mus_caroli", "Mus_indutus"))
+```
+
+
+

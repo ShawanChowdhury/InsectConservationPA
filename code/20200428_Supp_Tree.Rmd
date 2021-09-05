@@ -1,0 +1,138 @@
+---
+title: "Untitled"
+author: "Jon Nations"
+date: "4/28/2020"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = "/Users/Dicrostonyx/Documents/Projects/AncSt/Manuscript/R/tree_plot/")
+#knitr::opts_knit$set(root.dir = "/Users/esselstynlab/Documents/Jon//Users/esselstynlab/Documents/Jon/Murine_Ch_St/20190522_simmap/")
+```
+
+```{r}
+library(tidyverse)
+library(phytools)
+library(ggtree)
+library(geiger)
+library(wesanderson)
+library(ggimage)
+```
+
+
+Tree and data load in
+Data is already sorted and pruned to match tree
+State #5 = NA
+```{r}
+tre <- read.beast(file = "435_MCC.tre")
+tre2 <- read.newick(file = "435_MCC.nwk")
+dat <- read.csv("state_434_DROPTIP.csv", header=TRUE, row.names=1,stringsAsFactors=FALSE)
+#pd <- readRDS(file = "simmap_50_summary.Rds")
+#ace <- as.data.frame(pd$ace)
+```
+#keep only 1 state_name and rownames from dat
+```{r}
+dat2 <- dat[,2,FALSE]
+```
+
+```{r}
+getMRCA(tre2, c("Micaelamys_namaquensis", "Aethomys_namaquensis"))
+```
+
+
+```{r}
+#dat$state_name <- factor(dat$state_name, levels = rev(levels(dat$state_name)))
+```
+
+Colors
+```{r}
+require(RColorBrewer)
+cols <- c("#66a61e","#7570b3","#e6ab02", "#85D4E3", "#e5deda")
+names(cols) = c("Arboreal", "General", "Terrestrial", "Amphibious", "Unknown")
+```
+
+#Trying to reverse nodes
+SOMEHOW THERE IS AN "NA" in the a@data$height_0.95_HPD and I have NO IDEA WHY!
+so I actually had to add another NA for some reason, then read it back in!
+so now the data is xx.csv
+
+original code form here :
+https://groups.google.com/forum/#!msg/bioc-ggtree/wuAlY9phL9Q/L7efezPgDAAJ
+
+THis only needs to be done once! That's why it's blocked out.
+```{r}
+#THIS SOMEHOW INTRODUCES A NA INTO THE matrix. I added another NA just below it and everything is gravy!
+#xx <- matrix(unlist(tre@data$height_0.95_HPD))
+#write.csv(xx, file ="xx.csv")
+```
+
+Manually add the NA, then read back in and manipulate
+```{r}
+xx <- read_csv(file ="xx.csv")
+xx <- data.frame(V1=xx$V2[c(TRUE, FALSE)], V2=xx$V2[c(FALSE, TRUE)])
+minmax = xx
+```
+
+This creates a dataframe with all nodes, including tips
+```{r}
+bar_df = data.frame(node_id=as.integer(tre@data$node),as.data.frame(minmax))
+#changes column names
+names(bar_df) = c('node_id','min','max')
+#This removes tips
+bar_df = bar_df %>% filter(node_id > Ntip(tre@phylo))
+```
+
+```{r}
+b = ggtree(tre)
+bar_df = bar_df %>% left_join(b$data, by=c('node_id'='node')) %>% select(node_id,min,max,y)
+```
+Now bar_DF is my baby!
+
+#### Circular Version MODIFIED
+Main tree with clase labels
+```{r}
+tre3 <- ggtree(tre) + theme_tree2() 
+tre2 <- revts(tre3)
+tre3 <- ggtree(tre, layout = "fan", open.angle=7) #+ theme_tree2() 
+tre2 <- revts(tre3) 
+
+tre1 <- tre2 + scale_x_continuous(breaks=c(-21:0), labels=c("", 20,"","","","",15,"","","","",10,"","","","",5,"","","","",""), limits = c(-21, 9)) + 
+  # trying to make node points instead of nodelabs
+        #geom_nodelab(aes(x=branch, label=round(posterior, 2), subset = !is.na(as.numeric(posterior)) & as.numeric(posterior) < 0.94), vjust=-.6, hjust = .8, size = 1)   + 
+          geom_nodepoint(aes( label=posterior, subset = !is.na(as.numeric(posterior)) & as.numeric(posterior) > 0.9), size = 1.7, color ="grey30", alpha = 0.8)   +
+  #this was for the old way of adding 
+        #geom_range(range='height_0.95_HPD', color='#C93312', alpha=.3, size=1, branch.length="height") +
+  #This adds the new bars in!!
+  geom_segment(aes(x=-min, y=y+0, xend=-max, yend=y+0), data=bar_df, color='royalblue2', alpha = 0.7) +
+  #These are tribe labels
+  geom_cladelabel(node=625,  label = "Apodemini", align = T, offset = 4.5,  offset.text = 0.5, barsize = 2.2, color = c("grey80", "black"), fontface = "bold", fontsize = 5) +
+geom_cladelabel(node=558,   label = "Arvicanthini", align = T, offset = 4.5,  offset.text = 2.3, barsize = 2.2,  color = c("grey80", "black"), fontface = "bold", fontsize = 5) +
+geom_cladelabel(node=440,   label = "Hydromyini", align = T, offset = 4.5,  offset.text = 0.5, barsize = 2.2,  color = c("grey80", "black"), fontface = "bold", fontsize = 5) +
+geom_cladelabel(node=650,   label = "Malacomyini", align = T, offset = 4.5,  offset.text = 0.5, barsize = 2.2,  color = c("grey40", "black"), fontface = "bold", fontsize = 5) +
+geom_cladelabel(node=620,   label = "Millardini", align = T, offset = 4.5,  offset.text = 3.7, barsize = 2.2,  color = c("grey80", "black"), fontface = "bold", fontsize = 5) +
+geom_cladelabel(node=652,   label = "Murini", align = T, offset = 4.5,  offset.text = 0.5, barsize = 2.2,  color = c("grey80", "black"), fontface = "bold", fontsize = 5) +  
+geom_cladelabel(node=606,   label = "Otomyini", align = T, offset = 4.5,  offset.text = 2.9, barsize = 2.2,  color = c("grey40", "black"), fontface = "bold", fontsize = 5) +
+geom_cladelabel(node=856,   label = "Phloeomyini", align = T, offset = 4.5,  offset.text = 0.5, barsize = 2.2,  color = c("grey40", "black"), fontface = "bold", fontsize = 5) +
+geom_cladelabel(node=683,   label = "Praomyini", align = T, offset = 4.5,  offset.text = 0.7, barsize = 2.2,  color = c("grey40", "black"), fontface = "bold", fontsize = 5) +
+geom_cladelabel(node=729,   label = "Rattini", align = T, offset = 4.5,  offset.text = 3, barsize = 2.2,  color = c("grey40", "black"), fontface = "bold", fontsize = 5) 
+```
+
+```{r}
+pp1 <- tre1 %<+% dat + geom_tippoint(aes(color=state_name), size = 2.2) +
+  scale_color_manual(values = cols) + 
+    theme(legend.position = c(0.1, 0.7)) +
+  guides(colour = guide_legend(override.aes = list(size=8))) +
+
+  labs(color="Locomotor State") 
+
+pp2 <- pp1 +  geom_tiplab2(size=1.4, offset=0.31, align=TRUE, aes(angle=angle))
+
+pp2 
+
+
+output_file = "20200428_Supp_Tree.pdf"
+
+ggsave(output_file, width = 15, height = 15)
+
+
+```
+
