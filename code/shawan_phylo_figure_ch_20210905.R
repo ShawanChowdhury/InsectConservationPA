@@ -26,29 +26,30 @@ CH_df <- CH %>%
   arrange(Family) %>% 
   group_by(Family, Order) %>% 
   dplyr::mutate(pos = sum(gap > 0),
-                neg = sum(gap < 0)) %>% 
-  dplyr::summarise(positive = mean(pos),
-                   negative = mean(neg)) %>% 
-  dplyr::mutate(pa_coverage = ifelse(negative < 1, 100, 
-                                     ifelse(negative >= 0, (negative / (positive + negative)) * 100, "NA"))) 
+                neg = sum(gap <= 0)) %>% 
+  dplyr::summarise(not_meet_target = mean(pos),
+                   meet_target = mean(neg)) %>% 
+  mutate(prop_meet_target = meet_target / (not_meet_target + meet_target) * 100) 
 
 
-result <- lm(pa_coverage ~ Order, data = CH_df)
+result <- lm(prop_meet_target ~ Order, data = CH_df)
 summary(result)
 
 ## Basic model
 
-hist(CH_df$pa_coverage)
+hist(CH_df$prop_meet_target)
 
 summ_stat <- CH_df %>% 
   group_by(Order) %>% 
-  summarise(mean_meet_target =mean(pa_coverage),
-            median_meet_target = median(pa_coverage)) 
+  summarise(order_meet_target = sum(meet_target),
+            order_not_meet = sum(not_meet_target)) %>% 
+  mutate(total = order_meet_target + order_not_meet,
+         order_prop_meet = order_meet_target / (order_meet_target + order_not_meet) * 100)
           
 CH_df %>% 
   group_by(Order) %>% 
-  summarise(mean_meet_target =mean(pa_coverage),
-            median_meet_target = median(pa_coverage)) %>% 
+  summarise(mean_meet_target =mean(prop_meet_target),
+            median_meet_target = median(prop_meet_target)) %>% 
   arrange(mean_meet_target) %>% 
   filter(mean_meet_target < 40)
 
@@ -91,7 +92,7 @@ tbl_tree_CH_df_tmp %>% filter(stringr::str_detect(label, pattern = regex("idae")
 
 ## Dropping tips CH
 taxa_to_drop_CH <- tbl_tree_CH_df_tmp %>% 
-  dplyr::filter(is.na(pa_coverage), # filters those that do not have mean percent_gap_CH data
+  dplyr::filter(is.na(prop_meet_target), # filters those that do not have mean percent_gap_CH data
                 stringr::str_detect(label, pattern = regex("idae"))) %>% 
   dplyr::select(label)
 
@@ -157,8 +158,8 @@ node_label_df_CH$MRCA_node <- mcra_ch_vector
 ## Convert back to phylo
 y_tree_phylo_CH <- as.treedata(tbl_tree_CH_df)
 
-# Reverse of pa_coverage is Percentages of species meeting representation target
-y_tree_phylo_CH@data$per_target <- y_tree_phylo_CH@data$pa_coverage 
+# Reverse of prop_meet_target is Percentages of species meeting representation target
+y_tree_phylo_CH@data$per_target <- y_tree_phylo_CH@data$prop_meet_target 
 
 # PLOTTING ----------------------------------------------------------------
 
@@ -224,12 +225,32 @@ tree1
 # g2 <- tree_gradienter(colorRampPalette(c('red', 'blue', 'green')))
 
 
+# PIE CHARTS --------------------------------------------------------------
+
+pie_df_ch <- summ_stat %>% 
+  mutate(order_prop_not_meet = 100 - order_prop_meet) %>% 
+  select(Order, order_prop_meet, order_prop_not_meet) %>% 
+  pivot_longer(!Order, names_to = "order_prop_meet")
+
+
+
+pie_charts_order_proportion_ch <- ggplot(data=pie_df_ch, aes(x=" ", y=value, group=Order, colour=order_prop_meet, fill=order_prop_meet)) +
+  geom_bar(width = 1, stat = "identity", colour = "white") +
+  scale_fill_manual("Proportions CH", values=c("#648FFF", "#FFB000"), labels = c("Meet target", "Did not meet target")) +
+  coord_polar("y") + 
+  facet_wrap(.~ Order) +theme_void()
+
+
+
+
+# PRINT -------------------------------------------------------------------
+
 library(gridExtra)
-print_plot <- list(tree1)
+print_plot <- list(tree1, pie_charts_order_proportion_ch)
 
 dev.off()
 # 
-pdf("20210609_ch_gradients.pdf")
+pdf("20210906_ch_gradients.pdf")
 
 for (i in seq_along(print_plot)) {
   print(print_plot[[i]])

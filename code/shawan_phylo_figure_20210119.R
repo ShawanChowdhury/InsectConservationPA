@@ -61,8 +61,6 @@ summ_stat %>%
 plot(data = summ_stat, order_prop_meet ~ total)
 
 
-
-
 # tree from timetree ------------------------------------------------------
 # insect family tree from timetree.org. Download newick tree file 
 # read newick file with ggtree:read.tree
@@ -229,6 +227,26 @@ AH_tree_gradient
 # ggsave(filename = 'output/AH_tree_gradient.tiff', plot = AH_tree_gradient)
 
 
+# PIE CHART ---------------------------------------------------------------
+
+pie_df <- summ_stat %>% 
+  mutate(order_prop_not_meet = 100 - order_prop_meet) %>% 
+  select(Order, order_prop_meet, order_prop_not_meet) %>% 
+  pivot_longer(!Order, names_to = "order_prop_meet")
+
+
+
+pie_charts_order_proportion <- ggplot(data=pie_df, aes(x=" ", y=value, group=Order, colour=order_prop_meet, fill=order_prop_meet)) +
+  geom_bar(width = 1, stat = "identity", colour = "white") +
+  scale_fill_manual("Proportions", values=c("#648FFF", "#FFB000"), labels = c("Meet target", "Did not meet target")) +
+  coord_polar("y") + 
+  facet_wrap(.~ Order) +theme_void()
+
+
+
+# PRINT -------------------------------------------------------------------
+
+
 print_plot <- list(AH_tree_gradient, pie_charts_order_proportion)
 
 dev.off()
@@ -240,48 +258,3 @@ for (i in seq_along(print_plot)) {
 }
 
 dev.off()
-
-
-
-
-# Some families
-
-
-lep_vs_col <- AH_df %>% 
-  filter(Order %in% c("Lepidoptera", "Coleoptera")) %>% 
-  arrange(prop_meet_target) 
-
-
-write.csv(lep_vs_col, file = "compare_beetle_butterfly.csv")
-
-data.frame(label = y_tree_phylo_ah@phylo$tip.label, 
-           length = y_tree_phylo_ah@phylo$edge.length)
-
-
-
-y_tree_phylo_ah@phylo$edge.length
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# 
-# # Circular plot -----------------------------------------------------------
-# source("code/circular_plotter_function.R")
-# 
-# full_p <- circular_plotter(.df = AH_df)
-# 
-# ggsave(filename = 'output/AH_circular_no_lab.pdf', plot = full_p)
